@@ -1,5 +1,4 @@
-ther are two example of conditional Gaussian distribution with python (jupyter notebook) code
-Step-by-Step Code Explanation:(conditionalGaussianDistribution.ipynb)
+There are two examples of the conditional Gaussian distribution with Python (Jupyter Notebook) code, followed by a step-by-step explanation:(conditionalGaussianDistribution.ipynb)
 Step 1: Data Generation
 
 The first step is generating multivariate data that follows a specific relationship between the variables. We create four variables, where two are linearly dependent on others, introducing correlations into the dataset.
