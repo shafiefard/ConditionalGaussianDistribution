@@ -151,3 +151,178 @@ Explanation:
     Σcond​=Σbb​−Σba​Σaa−1​Σab​
 
     The function computes the log-probabilities and returns the sum of log-probabilities across all samples, along with the regression coefficients.
+........................................................................................
+step by step explanation for file (conditional.ipynb)
+........................................................................................
+Step 1: Import Required Libraries and Set Seed
+
+python
+
+import numpy as np
+from scipy.stats import norm
+
+np.random.seed(37)  # Set a random seed for reproducibility
+
+Explanation:
+
+    numpy is used to create and manipulate arrays.
+    scipy.stats.norm is used to calculate the probability density function (PDF) for the normal distribution.
+    Setting a seed ensures that random numbers generated are the same every time, making results reproducible.
+
+Step 2: Data Generation
+
+python
+
+N = 1000  # Number of samples
+
+x1 = np.random.normal(1, 1, N)  # Generate x1 ~ N(1, 1)
+x2 = np.random.normal(1 + 3.5 * x1, 1, N)  # Generate x2 dependent on x1
+x3 = np.random.normal(2, 1, N)  # Generate x3 ~ N(2, 1)
+x4 = np.random.normal(3.8 - 2.5 * x3, 1, N)  # Generate x4 dependent on x3
+
+Explanation:
+
+    We generate four normally distributed variables: x1, x2, x3, and x4.
+        x1 is generated as x1∼N(1,1)x1​∼N(1,1).
+        x2 is generated with a dependency on x1, following the equation x2∼N(1+3.5⋅x1,1)x2​∼N(1+3.5⋅x1​,1), which introduces correlation.
+        x3 is independent, drawn from x3∼N(2,1)x3​∼N(2,1).
+        x4 depends on x3 via x4∼N(3.8−2.5⋅x3,1)x4​∼N(3.8−2.5⋅x3​,1).
+
+Step 3: Create Dataset and Compute Statistics
+
+python
+
+data = np.vstack([x1, x2, x3, x4]).T  # Stack x1, x2, x3, x4 into N x 4 matrix
+
+# Calculate basic statistics
+means = data.mean(axis=0)  # Mean of each variable
+mins = data.min(axis=0)  # Min of each variable
+maxs = data.max(axis=0)  # Max of each variable
+cov = np.cov(data.T)  # Covariance matrix
+std = np.sqrt(np.diag(cov))  # Standard deviations
+cor = np.corrcoef(data.T)  # Correlation matrix
+
+Explanation:
+
+    The data array is created by stacking the generated samples (x1, x2, x3, and x4) into a matrix with shape 1000×41000×4.
+    We compute:
+        Means of the variables.
+        Minimums and maximums of the dataset.
+        Covariance matrix: shows how the variables covary.
+        Standard deviations: the square root of the diagonal of the covariance matrix.
+        Correlation matrix: shows the strength and direction of linear relationships between the variables.
+
+Step 4: Define Helper Functions for Conditional Distribution
+Helper Function 1: get_index_2
+
+python
+
+def get_index_2(index_1, N):
+    return [i for i in range(N) if i not in index_1]
+
+Explanation:
+
+    This function takes in index_1 (the indices of one subset) and returns the complementary set of indices (index_2).
+
+Helper Function 2: partition_means
+
+python
+
+def partition_means(index_1, means, index_2=None):
+    index_2 = get_index_2(index_1, len(means)) if index_2 is None else index_2
+    m_1, m_2 = means[index_1], means[index_2]
+    return m_1, m_2
+
+Explanation:
+
+    This function splits the means vector into two parts: m_1 for the indices in index_1 and m_2 for the remaining indices (or those in index_2).
+
+Helper Function 3: partition_cov
+
+python
+
+def partition_cov(index_1, cov, index_2=None):
+    index_2 = get_index_2(index_1, cov.shape[1]) if index_2 is None else index_2
+    s_11 = cov[index_1][:, index_1]  # Covariance of x_a
+    s_12 = cov[index_1][:, index_2]  # Covariance between x_a and x_b
+    s_21 = cov[index_2][:, index_1]  # Covariance between x_b and x_a
+    s_22 = cov[index_2][:, index_2]  # Covariance of x_b
+
+    return s_11, s_12, s_21, np.linalg.inv(s_22)
+
+Explanation:
+
+    This function partitions the covariance matrix cov into submatrices:
+        Σ11Σ11​: Covariance of x1x1​ (subset 1).
+        Σ12Σ12​: Covariance between x1x1​ and x2x2​.
+        Σ21Σ21​: Covariance between x2x2​ and x1x1​.
+        Σ22Σ22​: Covariance of x2x2​, and the inverse of Σ22Σ22​ is computed.
+
+Helper Function 4: partition_x
+
+python
+
+def partition_x(index_1, x, index_2=None):
+    index_2 = get_index_2(index_1, len(x)) if index_2 is None else index_2
+    x_1 = x[index_1]
+    x_2 = x[index_2]
+    return x_1, x_2
+
+Explanation:
+
+    This function splits a data vector x into two parts, one corresponding to the indices in index_1 and the other in index_2.
+
+Step 5: Compute Conditional Log-Probability
+
+python
+
+def get_log_proba(index_1, data, means, cov, index_2=None, zero=0.000001):
+    m_1, m_2 = partition_means(index_1, means, index_2)
+    s_11, s_12, s_21, s_22 = partition_cov(index_1, cov, index_2)
+    s = (s_11 - s_12.dot(s_22).dot(s_21))[0, 0]  # Conditional variance
+
+    log_proba = []
+    for x in data:
+        x_1, x_2 = partition_x(index_1, x, index_2)  # Partition data
+        m = (m_1 + s_12.dot(s_22).dot((x_2 - m_2).T))[0]  # Conditional mean
+        p = norm.pdf(x_1, loc=m, scale=s)  # PDF of conditional distribution
+        log_p = np.log(p) if p >= zero else 0.0  # Avoid log(0)
+        log_proba.append(log_p)
+
+    return sum(log_proba)[0], s_12.dot(s_22)[0]  # Return log-probability and coefficients
+
+Explanation:
+
+    Input:
+        index_1: Indices for the conditional variable.
+        data: Dataset.
+        means, cov: Mean vector and covariance matrix.
+        index_2: Indices for the conditioning variable.
+    Process:
+        Partition the mean and covariance matrix.
+        Calculate the conditional variance: Σcond=Σ11−Σ12Σ22−1Σ21Σcond​=Σ11​−Σ12​Σ22−1​Σ21​.
+        For each sample x in data, compute:
+            Conditional mean: μcond=μ1+Σ12Σ22−1(x2−μ2)μcond​=μ1​+Σ12​Σ22−1​(x2​−μ2​).
+            PDF of x1∣x2x1​∣x2​ using the normal distribution.
+            Sum of the log-probabilities.
+
+Step 6: Apply Function to Dataset
+
+python
+
+# Example cases of computing conditional probabilities
+
+get_log_proba([1], data, means, cov, [0])  # P(x2 | x1)
+get_log_proba([0], data, means, cov, [1])  # P(x1 | x2)
+get_log_proba([1], data, means, cov, [2])  # P(x2 | x3)
+get_log_proba([1], data, means, cov, [3])  # P(x2 | x4)
+get_log_proba([1], data, means, cov, [0, 2])  # P(x2 | x1, x3)
+get_log_proba([1], data, means, cov, [0, 3])  # P(x2 | x1, x4)
+get_log_proba([1], data, means, cov, [2, 3])  # P(x2 | x3, x4)
+get_log_proba([1], data, means, cov, [0, 2, 3])  # P(x2 | x1, x3, x4)
+
+Explanation:
+
+    These calls to get_log_proba compute the log-probabilities for different conditional distributions:
+        Example: get_log_proba([1], data, means, cov, [0]) computes the log-probability of x2∣x1x2​∣x1​ using the conditional Gaussian formula.
+
